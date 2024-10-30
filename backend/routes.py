@@ -29,9 +29,9 @@ if mongodb_service == None:
     sys.exit(1)
 
 if mongodb_username and mongodb_password:
-    url = f"mongodb://{mongodb_username}:{mongodb_password}@{mongodb_service}"
+    url = f"mongodb://{mongodb_username}:{mongodb_password}@{mongodb_service}:{mongodb_port}"
 else:
-    url = f"mongodb://{mongodb_service}"
+    url = f"mongodb://{mongodb_service}:{mongodb_port}"
 
 
 print(f"connecting to url: {url}")
@@ -51,3 +51,60 @@ def parse_json(data):
 ######################################################################
 # INSERT CODE HERE
 ######################################################################
+@app.route('/health', methods=['GET'])
+def health():
+    # Return a simple JSON response indicating the service is healthy
+    return jsonify({"status": "OK"}), 200
+
+@app.route("/count")
+def count():
+    """return length of data"""
+    count = db.songs.count_documents({})
+    return {"count": count}, 200
+
+@app.route('/song', methods=['GET'])
+def song():
+    songs = list(db.songs.find({}))
+    return jsonify({"songs": songs}), 200
+
+@app.route('/song/<int:id>', methods=['GET'])
+def get_song_by_id(id):
+    song = db.songs.find_one({"id": id})
+    if not song:
+        {"message": f"song with id {id} not found"}, 404
+    return parse_json(song), 200
+
+@app.route('/song', methods=['POST'])
+def creat_song():
+    song_in = request.json
+    # if the id is already there, return 303 with the URL for the resource
+    song = db.songs.find_one({"id": song_in["id"]})
+    if song:
+        return {
+            "Message": f"song with id {song_in['id']} already present"
+        }, 302
+    insert_result: InsertOneResult = db.songs.insert_one(song_in)
+    return {"inserted id": parse_json(insert_result.inserted_id)}, 201
+
+@app.route('/song/<int:id>', methods=['PUT'])
+def update_song(id):
+    # get data from the json body
+    song_in = request.json
+    song = db.songs.find_one({"id": id})
+    if song == None:
+        return {"message": "song not found"}, 404
+    updated_data = {"$set": song_in}
+    result = db.songs.update_one({"id": id}, updated_data)
+    if result.modified_count == 0:
+        return {"message": "song found, but nothing updated"}, 200
+    else:
+        return parse_json(db.songs.find_one({"id": id})), 200
+
+@app.route("/song/<int:id>", methods=["DELETE"])
+def delete_song(id):
+
+    result = db.songs.delete_one({"id": id})
+    if result.deleted_count == 0:
+        return {"message": "song not found"}, 404
+    else:
+        return "", 204
